@@ -14,7 +14,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Build corrected Lesson 1 from lesson-1-test
+      - name: Build Lesson 1 and Lesson 2 preview from lesson-1-test
         shell: bash
         run: |
           set -euo pipefail
@@ -24,11 +24,12 @@ jobs:
           p = Path('index.html')
           s = p.read_text(encoding='utf-8')
 
+          # Lesson 1: restore the Space Bar activity and normalize its handler.
           space_html = '''<div class="lessonCard hidden" id="spacePart"><h2>Part 3: ␣ Space Bar</h2><p>Find the long <strong>Space Bar</strong> at the bottom of your keyboard. Press it <strong>5 times</strong>.</p><div class="target" id="spacePrompt">_</div><p id="spaceFeedback">Your space bar is ready!</p><div class="progress"><div id="spaceBar"></div></div></div>'''
           marker = '<section id="teacherLogin" class="hidden">'
           if 'id="spacePart"' not in s:
               if marker not in s:
-                  raise SystemExit('Could not find lesson insertion point')
+                  raise SystemExit('Could not find Lesson 1 insertion point')
               s = s.replace(marker, space_html + marker, 1)
 
           start = s.find('function spaceKey(e){')
@@ -39,16 +40,64 @@ jobs:
           s = s[:start] + fixed_space + s[end:]
           s = s.replace("document.getElementById('fjPart').scrollIntoView({behavior:'smooth',block:'center'});window.addEventListener('keydown',spaceKey);document.getElementById('fjPart').scrollIntoView({behavior:'smooth',block:'center'});", "window.addEventListener('keydown',spaceKey);")
 
+          # Lesson 2: deeper, game-based F/J practice.
+          lesson2_html = '''<section id="lesson2" class="hidden"><div class="panel"><button class="back" onclick="show('studentHome')">← Back to Student Home</button><div class="ey">🌟 TYPING TRAIL • LESSON 2</div><h1>⌨️ F & J Adventure</h1><p>Review the home-row guide keys, then play the falling-letter game.</p><div class="lessonCard" id="l2Review"><h2>Part 1: 🔎 Quick F & J Review</h2><p>Put your left index finger on <strong>F</strong> and your right index finger on <strong>J</strong>. Press the key shown below.</p><div class="target" id="l2ReviewPrompt">F</div><p id="l2ReviewFeedback">Get ready!</p><div class="progress"><div id="l2ReviewBar"></div></div></div><div class="lessonCard hidden" id="l2Fall"><h2>Part 2: ⭐ Falling F or J!</h2><p>A letter will fall from the top. Press the matching key <strong>before it reaches the bottom</strong>.</p><div id="fallGame" style="height:320px;border:4px dashed #b8b0e8;border-radius:24px;background:#faf9ff;position:relative;overflow:hidden;text-align:center"><div id="fallLetter" style="position:absolute;top:-70px;left:50%;transform:translateX(-50%);font-size:72px;font-weight:900;color:#7057d9">F</div><div style="position:absolute;bottom:14px;left:8%;right:8%;border-top:5px solid #ffd15c"></div></div><p id="l2FallFeedback">Press the matching key!</p><div class="progress"><div id="l2FallBar"></div></div><p class="small">Round <span id="l2Round">1</span> of 12</p></div><div class="result hidden" id="l2Complete"><h2>🎉 F & J Adventure Complete!</h2><p id="l2ResultText"></p><button class="btn primary" onclick="show('studentHome')">Back to My Trail</button></div></div></section>'''
+          if 'id="lesson2"' not in s:
+              if marker not in s:
+                  raise SystemExit('Could not find Lesson 2 insertion point')
+              s = s.replace(marker, lesson2_html + marker, 1)
+
+          # Add Lesson 2 to the visible-section switcher.
+          s = s.replace("['home','student','studentHome','lesson1','teacherLogin','teacherSignup','dashboard']", "['home','student','studentHome','lesson1','lesson2','teacherLogin','teacherSignup','dashboard']", 1)
+
+          # Add a Lesson 2 button to the student home.
+          home_marker = '<button class="btn primary" onclick="startLesson1()">Start Lesson 1 🚀</button>'
+          home_replacement = home_marker + '<button class="btn yellow" onclick="startLesson2()">Start Lesson 2 ⭐</button>'
+          if 'onclick="startLesson2()"' not in s:
+              if home_marker not in s:
+                  raise SystemExit('Could not find student home lesson button')
+              s = s.replace(home_marker, home_replacement, 1)
+
+          # Add a Lesson 2 start button to the Lesson 1 completion panel.
+          complete_marker = '<p>Fantastic! You practiced mouse skills and your first two home-row letters.</p>'
+          complete_replacement = complete_marker + '<button class="btn primary" onclick="startLesson2()">Continue to Lesson 2 🚀</button>'
+          if 'Continue to Lesson 2 🚀' not in s:
+              if complete_marker not in s:
+                  raise SystemExit('Could not find Lesson 1 completion panel')
+              s = s.replace(complete_marker, complete_replacement, 1)
+
+          # Insert Lesson 2 state and functions before the existing auth bootstrap.
+          bootstrap = 'sb.auth.getSession().then(({data:{session}})=>{'
+          if 'function startLesson2(){' not in s:
+              lesson2_js = '''let l2ReviewI=0,l2ReviewCorrect=0,l2ReviewSeq=['F','J','F','J','J'],l2FallI=0,l2FallCorrect=0,l2FallLetter='F',l2FallTop=0,l2FallTimer=null,l2FallStart=0,l2FallDuration=4200;
+function startLesson2(){l2ReviewI=0;l2ReviewCorrect=0;l2FallI=0;l2FallCorrect=0;document.getElementById('l2Review').classList.remove('hidden');document.getElementById('l2Fall').classList.add('hidden');document.getElementById('l2Complete').classList.add('hidden');document.getElementById('l2ReviewPrompt').textContent=l2ReviewSeq[0];document.getElementById('l2ReviewFeedback').textContent='Get ready!';document.getElementById('l2ReviewBar').style.width='0';show('lesson2');window.removeEventListener('keydown',l2ReviewKey);window.addEventListener('keydown',l2ReviewKey)}
+function l2ReviewKey(e){if(document.getElementById('l2Review').classList.contains('hidden'))return;const k=e.key.toUpperCase();if(k!=='F'&&k!=='J')return;e.preventDefault();if(k===l2ReviewSeq[l2ReviewI]){l2ReviewCorrect++;l2ReviewI++;document.getElementById('l2ReviewFeedback').textContent='⭐ Great placement!';document.getElementById('l2ReviewBar').style.width=(l2ReviewI/l2ReviewSeq.length*100)+'%';if(l2ReviewI>=l2ReviewSeq.length){window.removeEventListener('keydown',l2ReviewKey);document.getElementById('l2Review').classList.add('hidden');document.getElementById('l2Fall').classList.remove('hidden');startFallingGame()}else document.getElementById('l2ReviewPrompt').textContent=l2ReviewSeq[l2ReviewI]}else document.getElementById('l2ReviewFeedback').textContent='Look at the letter and try again.'}
+function startFallingGame(){l2FallI=0;l2FallCorrect=0;l2FallDuration=4200;document.getElementById('l2FallBar').style.width='0';document.getElementById('l2Round').textContent='1';nextFallingLetter();window.removeEventListener('keydown',l2FallKey);window.addEventListener('keydown',l2FallKey)}
+function nextFallingLetter(){if(l2FallI>=12){finishLesson2();return}l2FallLetter=Math.random()<.5?'F':'J';const el=document.getElementById('fallLetter');el.textContent=l2FallLetter;el.style.top='-70px';el.style.left=(25+Math.random()*50)+'%';l2FallTop=-70;l2FallStart=performance.now();if(l2FallTimer)cancelAnimationFrame(l2FallTimer);animateFallingLetter(l2FallStart)}
+function animateFallingLetter(t){const el=document.getElementById('fallLetter');const area=document.getElementById('fallGame');const h=area.clientHeight;const target=h-75;const elapsed=t-l2FallStart;const p=Math.min(1,elapsed/l2FallDuration);l2FallTop=-70+(target+70)*p;el.style.top=l2FallTop+'px';if(p>=1){document.getElementById('l2FallFeedback').textContent='⏰ Too slow! Watch for the next letter.';l2FallI++;document.getElementById('l2FallBar').style.width=(l2FallI/12*100)+'%';document.getElementById('l2Round').textContent=Math.min(12,l2FallI+1);l2FallDuration=Math.max(2200,l2FallDuration-150);setTimeout(nextFallingLetter,450)}else l2FallTimer=requestAnimationFrame(animateFallingLetter)}
+function l2FallKey(e){if(document.getElementById('l2Fall').classList.contains('hidden'))return;const k=e.key.toUpperCase();if(k!=='F'&&k!=='J')return;e.preventDefault();if(k===l2FallLetter&&l2FallTop<document.getElementById('fallGame').clientHeight-75){l2FallCorrect++;l2FallI++;if(l2FallTimer)cancelAnimationFrame(l2FallTimer);document.getElementById('l2FallFeedback').textContent='🌟 Nice catch!';document.getElementById('l2FallBar').style.width=(l2FallI/12*100)+'%';document.getElementById('l2Round').textContent=Math.min(12,l2FallI+1);l2FallDuration=Math.max(2200,l2FallDuration-150);setTimeout(nextFallingLetter,350)}else document.getElementById('l2FallFeedback').textContent='Almost! Match the falling letter.'}
+async function finishLesson2(){if(l2FallTimer)cancelAnimationFrame(l2FallTimer);window.removeEventListener('keydown',l2FallKey);document.getElementById('l2Fall').classList.add('hidden');document.getElementById('l2Complete').classList.remove('hidden');document.getElementById('l2ResultText').textContent=`You got ${l2ReviewCorrect} of ${l2ReviewSeq.length} in the review and caught ${l2FallCorrect} of 12 falling letters!`;try{await fetch(SUPABASE_URL+'/functions/v1/student-progress',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({student_id:student?.id,lesson_id:'lesson-2-fj-adventure',typing_correct:l2ReviewCorrect+l2FallCorrect,typing_total:l2ReviewSeq.length+12})})}catch(e){console.log(e)}}
+'''
+              if bootstrap not in s:
+                  raise SystemExit('Could not find JavaScript bootstrap')
+              s = s.replace(bootstrap, lesson2_js + bootstrap, 1)
+
+          # Validate the complete preview build.
+          required = ['id="mousePart1"','id="mousePart2"','id="spacePart"','id="fjPart"','id="practicePart"','id="fjPart2"','id="lesson2"','function startLesson2(){','function startFallingGame(){','function finishLesson2(){']
+          for item in required:
+              if item not in s:
+                  raise SystemExit(f'Missing required content: {item}')
           if s.count('function spaceKey(e){') != 1:
               raise SystemExit('Space Bar function was not normalized to exactly one definition')
-          for required in ['id="mousePart1"','id="mousePart2"','id="spacePart"','id="fjPart"','id="practicePart"','id="fjPart2"','function startPractice(){','function startChallenge(){']:
-              if required not in s:
-                  raise SystemExit(f'Missing required Lesson 1 element: {required}')
           p.write_text(s, encoding='utf-8')
           PY
-      - name: Validate Lesson 1 flow
+      - name: Validate Lesson 1 and Lesson 2
         run: |
           grep -q 'id="spacePart"' index.html
+          grep -q 'id="lesson2"' index.html
+          grep -q 'function startLesson2(){' index.html
+          grep -q 'function startFallingGame(){' index.html
+          grep -q 'function finishLesson2(){' index.html
           test "$(grep -o 'function spaceKey(e)' index.html | wc -l | tr -d ' ')" = "1"
           grep -q 'id="mousePart1"' index.html
           grep -q 'id="mousePart2"' index.html
@@ -68,6 +117,6 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Deploy Lesson 1 preview
+      - name: Deploy Lesson 1 and Lesson 2 preview
         id: deployment
         uses: actions/deploy-pages@v4
