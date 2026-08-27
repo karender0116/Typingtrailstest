@@ -1,0 +1,73 @@
+name: Lesson 1 Preview
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build corrected Lesson 1 from lesson-1-test
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL https://raw.githubusercontent.com/karender0116/Typing-trails/lesson-1-test/index.html -o index.html
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+
+          space_html = '''<div class="lessonCard hidden" id="spacePart"><h2>Part 3: ␣ Space Bar</h2><p>Find the long <strong>Space Bar</strong> at the bottom of your keyboard. Press it <strong>5 times</strong>.</p><div class="target" id="spacePrompt">_</div><p id="spaceFeedback">Your space bar is ready!</p><div class="progress"><div id="spaceBar"></div></div></div>'''
+          marker = '<section id="teacherLogin" class="hidden">'
+          if 'id="spacePart"' not in s:
+              if marker not in s:
+                  raise SystemExit('Could not find lesson insertion point')
+              s = s.replace(marker, space_html + marker, 1)
+
+          start = s.find('function spaceKey(e){')
+          end = s.find('function startPractice(){', start)
+          if start < 0 or end < 0:
+              raise SystemExit('Could not find Space Bar function block')
+          fixed_space = '''function spaceKey(e){if(document.getElementById('spacePart').classList.contains('hidden'))return;if(e.key===' '){e.preventDefault();spaceCount++;document.getElementById('spaceBar').style.width=(spaceCount/5*100)+'%';document.getElementById('spaceFeedback').textContent=spaceCount<5?'⭐ Nice! Press it again!':'🎉 Space Bar activity complete! Next: F and J.';if(spaceCount>=5){window.removeEventListener('keydown',spaceKey);document.getElementById('spacePart').classList.add('hidden');document.getElementById('fjPart').classList.remove('hidden');document.getElementById('fjPart').scrollIntoView({behavior:'smooth',block:'center'});}}}'''
+          s = s[:start] + fixed_space + s[end:]
+          s = s.replace("document.getElementById('fjPart').scrollIntoView({behavior:'smooth',block:'center'});window.addEventListener('keydown',spaceKey);document.getElementById('fjPart').scrollIntoView({behavior:'smooth',block:'center'});", "window.addEventListener('keydown',spaceKey);")
+
+          if s.count('function spaceKey(e){') != 1:
+              raise SystemExit('Space Bar function was not normalized to exactly one definition')
+          for required in ['id="mousePart1"','id="mousePart2"','id="spacePart"','id="fjPart"','id="practicePart"','id="fjPart2"','function startPractice(){','function startChallenge(){']:
+              if required not in s:
+                  raise SystemExit(f'Missing required Lesson 1 element: {required}')
+          p.write_text(s, encoding='utf-8')
+          PY
+      - name: Validate Lesson 1 flow
+        run: |
+          grep -q 'id="spacePart"' index.html
+          test "$(grep -o 'function spaceKey(e)' index.html | wc -l | tr -d ' ')" = "1"
+          grep -q 'id="mousePart1"' index.html
+          grep -q 'id="mousePart2"' index.html
+          grep -q 'id="fjPart2"' index.html
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: .
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy Lesson 1 preview
+        id: deployment
+        uses: actions/deploy-pages@v4
