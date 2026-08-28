@@ -27,11 +27,15 @@ jobs:
         uses: actions/configure-pages@v5
       - name: Validate preview files
         run: |
+          set -euo pipefail
           test -s index.html
           grep -q 'Typing Trails' index.html
+          grep -q 'Lesson 1' index.html
           grep -q 'Lesson 2' index.html
+          grep -q 'startLesson1' index.html
           grep -q 'startLesson2' index.html
-          grep -q 'startFallingGame' index.html
+          grep -q 'nextLetter' index.html
+          grep -q 'finishLesson2' index.html
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
